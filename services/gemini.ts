@@ -1,11 +1,19 @@
 
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { Lead, KnowledgeEntry, AppState, TokenUsage } from "../types";
+import { getSetting } from "./supabase";
 
-const getAI = () => {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+const getAI = async () => {
+  // Try to get API key from user settings first
+  let apiKey = await getSetting('geminiApiKey');
+  
+  // Fallback to env variable if not in settings
   if (!apiKey) {
-    throw new Error('VITE_GEMINI_API_KEY is not set in .env file');
+    apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  }
+  
+  if (!apiKey) {
+    throw new Error('Gemini API key not configured. Please add it in Settings.');
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -42,7 +50,7 @@ export const performMarketResearch = async (
   niche: string,
   state: AppState
 ): Promise<AgentResult<{ analysis: string; leads: Lead[] }>> => {
-  const ai = getAI();
+  const ai = await getAI();
   const config = state.agentConfigs.find(c => c.role === 'Researcher');
   const model = config?.selectedModel || 'gemini-3-pro-preview';
 
@@ -102,7 +110,7 @@ export const craftPersonalizedEmail = async (
   memory: KnowledgeEntry[],
   state: AppState
 ): Promise<AgentResult<string>> => {
-  const ai = getAI();
+  const ai = await getAI();
   const config = state.agentConfigs.find(c => c.role === 'Copywriter');
   const model = config?.selectedModel || 'gemini-3-flash-preview';
   
@@ -129,7 +137,7 @@ export const processIncomingMessage = async (
   memory: KnowledgeEntry[],
   state: AppState
 ): Promise<AgentResult<{ reply: string; status: Lead['status'] }>> => {
-  const ai = getAI();
+  const ai = await getAI();
   const config = state.agentConfigs.find(c => c.role === 'CRM');
   const model = config?.selectedModel || 'gemini-3-pro-preview';
   const memoryStr = memory.map(m => `${m.topic}: ${m.content}`).join("\n");
