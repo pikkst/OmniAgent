@@ -5,7 +5,7 @@ import { getSetting } from './supabase';
 /**
  * Get OAuth client credentials from Supabase or environment variables
  */
-async function getOAuthCredentials(integration: IntegrationName): Promise<{ clientId: string; clientSecret: string }> {
+export async function getOAuthCredentials(integration: IntegrationName): Promise<{ clientId: string; clientSecret: string }> {
   const prefix = integration === 'Gmail' ? 'GOOGLE' : integration.toUpperCase();
   
   // Try to get from Supabase first
@@ -47,7 +47,19 @@ const TWITTER_OAUTH_CONFIG = {
   scopes: ['tweet.read', 'tweet.write', 'users.read', 'offline.access']
 };
 
-export type IntegrationName = 'Gmail' | 'LinkedIn' | 'Twitter';
+const FACEBOOK_OAUTH_CONFIG = {
+  authEndpoint: 'https://www.facebook.com/v18.0/dialog/oauth',
+  tokenEndpoint: 'https://graph.facebook.com/v18.0/oauth/access_token',
+  scopes: [
+    'pages_manage_posts',
+    'pages_read_engagement',
+    'instagram_basic',
+    'instagram_content_publish',
+    'public_profile'
+  ]
+};
+
+export type IntegrationName = 'Gmail' | 'LinkedIn' | 'Twitter' | 'Facebook';
 
 /**
  * Generate OAuth2 authorization URL
@@ -66,6 +78,9 @@ export async function getOAuthUrl(integration: IntegrationName): Promise<string>
       break;
     case 'Twitter':
       config = TWITTER_OAUTH_CONFIG;
+      break;
+    case 'Facebook':
+      config = FACEBOOK_OAUTH_CONFIG;
       break;
     default:
       throw new Error(`Unsupported integration: ${integration}`);
@@ -104,6 +119,9 @@ export async function exchangeCodeForTokens(
       break;
     case 'Twitter':
       config = TWITTER_OAUTH_CONFIG;
+      break;
+    case 'Facebook':
+      config = FACEBOOK_OAUTH_CONFIG;
       break;
     default:
       throw new Error(`Unsupported integration: ${integration}`);

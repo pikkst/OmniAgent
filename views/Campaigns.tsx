@@ -7,6 +7,7 @@ import { createInteraction, updateLead, updateUsageTracking, createSocialPost } 
 import { sendEmail, isGmailConnected } from '../services/gmail';
 import { createLinkedInPost, isLinkedInConnected } from '../services/linkedin';
 import { createTweet, isTwitterConnected } from '../services/twitter';
+import { createFacebookPost, createInstagramPost } from '../services/facebook';
 
 const Campaigns: React.FC<{ state: AppState; updateState: (u: Partial<AppState>) => void }> = ({ state, updateState }) => {
   const [activeTab, setActiveTab] = useState<'social' | 'email'>('social');
@@ -135,6 +136,10 @@ const Campaigns: React.FC<{ state: AppState; updateState: (u: Partial<AppState>)
             ? socialContent.substring(0, 277) + '...' 
             : socialContent;
           postId = await createTweet({ text: tweetText });
+        } else if (socialPlatform === 'Facebook') {
+          postId = (await createFacebookPost(socialContent)).id;
+        } else if (socialPlatform === 'Instagram') {
+          throw new Error('Instagram requires an image URL. This feature is coming soon.');
         } else {
           throw new Error(`${socialPlatform} integration not yet implemented`);
         }

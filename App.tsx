@@ -8,7 +8,8 @@ import {
   Database, 
   Settings, 
   BrainCircuit, 
-  BarChart3
+  BarChart3,
+  Mail
 } from 'lucide-react';
 import Dashboard from './views/Dashboard';
 import LeadFinder from './views/LeadFinder';
@@ -16,6 +17,7 @@ import Campaigns from './views/Campaigns';
 import KnowledgeBase from './views/KnowledgeBase';
 import CRM from './views/CRM';
 import SettingsView from './views/SettingsView';
+import EmailTemplatesView from './views/EmailTemplatesView';
 import OAuthCallback from './views/OAuthCallback';
 import { AppState, AgentModuleConfig } from './types';
 import { loadAllData } from './services/supabase';
@@ -103,6 +105,7 @@ const App: React.FC = () => {
             <SidebarLink to="/" icon={<LayoutDashboard size={20} />} label="Dashboard" />
             <SidebarLink to="/leads" icon={<Users size={20} />} label="Lead Finder" />
             <SidebarLink to="/campaigns" icon={<Send size={20} />} label="Campaigns" />
+            <SidebarLink to="/templates" icon={<Mail size={20} />} label="Email Templates" />
             <SidebarLink to="/crm" icon={<BarChart3 size={20} />} label="CRM & Analytics" />
             <SidebarLink to="/knowledge" icon={<Database size={20} />} label="Memory Bank" />
           </nav>
@@ -128,6 +131,7 @@ const App: React.FC = () => {
               <Route path="/" element={<Dashboard state={state} updateState={updateState} />} />
               <Route path="/leads" element={<LeadFinder state={state} updateState={updateState} />} />
               <Route path="/campaigns" element={<Campaigns state={state} updateState={updateState} />} />
+              <Route path="/templates" element={<EmailTemplatesView />} />
               <Route path="/crm" element={<CRM state={state} updateState={updateState} />} />
               <Route path="/knowledge" element={<KnowledgeBase state={state} updateState={updateState} />} />
               <Route path="/settings" element={<SettingsView state={state} updateState={updateState} />} />
