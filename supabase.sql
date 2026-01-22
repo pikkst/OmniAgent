@@ -136,6 +136,16 @@ ALTER TABLE agent_configs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_tracking ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Allow all operations" ON leads;
+DROP POLICY IF EXISTS "Allow all operations" ON interactions;
+DROP POLICY IF EXISTS "Allow all operations" ON knowledge_base;
+DROP POLICY IF EXISTS "Allow all operations" ON social_posts;
+DROP POLICY IF EXISTS "Allow all operations" ON integrations;
+DROP POLICY IF EXISTS "Allow all operations" ON agent_configs;
+DROP POLICY IF EXISTS "Allow all operations" ON settings;
+DROP POLICY IF EXISTS "Allow all operations" ON usage_tracking;
+
 -- Create policies (allow all for now - adjust based on your auth requirements)
 CREATE POLICY "Allow all operations" ON leads FOR ALL USING (true);
 CREATE POLICY "Allow all operations" ON interactions FOR ALL USING (true);
@@ -192,6 +202,11 @@ CREATE TABLE IF NOT EXISTS email_templates (
 CREATE TRIGGER update_email_templates_updated_at BEFORE UPDATE ON email_templates
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- Enable RLS for email_templates
+ALTER TABLE email_templates ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all operations" ON email_templates;
+CREATE POLICY "Allow all operations" ON email_templates FOR ALL USING (true);
+
 -- A/B Testing tables
 CREATE TABLE IF NOT EXISTS ab_tests (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -222,6 +237,14 @@ CREATE TABLE IF NOT EXISTS ab_test_variants (
 CREATE TRIGGER update_ab_tests_updated_at BEFORE UPDATE ON ab_tests
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- Enable RLS for A/B testing tables
+ALTER TABLE ab_tests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ab_test_variants ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all operations" ON ab_tests;
+DROP POLICY IF EXISTS "Allow all operations" ON ab_test_variants;
+CREATE POLICY "Allow all operations" ON ab_tests FOR ALL USING (true);
+CREATE POLICY "Allow all operations" ON ab_test_variants FOR ALL USING (true);
+
 -- Webhooks tables
 CREATE TABLE IF NOT EXISTS webhooks (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -249,6 +272,14 @@ CREATE TABLE IF NOT EXISTS webhook_logs (
 CREATE TRIGGER update_webhooks_updated_at BEFORE UPDATE ON webhooks
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- Enable RLS for webhook tables
+ALTER TABLE webhooks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE webhook_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all operations" ON webhooks;
+DROP POLICY IF EXISTS "Allow all operations" ON webhook_logs;
+CREATE POLICY "Allow all operations" ON webhooks FOR ALL USING (true);
+CREATE POLICY "Allow all operations" ON webhook_logs FOR ALL USING (true);
+
 -- User profiles and authentication
 CREATE TABLE IF NOT EXISTS user_profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -267,6 +298,12 @@ CREATE TRIGGER update_user_profiles_updated_at BEFORE UPDATE ON user_profiles
 
 -- Enable Row Level Security
 ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can view their own profile" ON user_profiles;
+DROP POLICY IF EXISTS "Users can update their own profile" ON user_profiles;
+DROP POLICY IF EXISTS "Admins can view all profiles" ON user_profiles;
+DROP POLICY IF EXISTS "Admins can update all profiles" ON user_profiles;
 
 -- Policies for user_profiles
 CREATE POLICY "Users can view their own profile" ON user_profiles
