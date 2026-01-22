@@ -16,8 +16,10 @@ import Campaigns from './views/Campaigns';
 import KnowledgeBase from './views/KnowledgeBase';
 import CRM from './views/CRM';
 import SettingsView from './views/SettingsView';
+import OAuthCallback from './views/OAuthCallback';
 import { AppState, AgentModuleConfig } from './types';
 import { loadAllData } from './services/supabase';
+import { startScheduledPostsProcessor } from './services/scheduler';
 
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>({
@@ -48,6 +50,15 @@ const App: React.FC = () => {
       }
     };
     loadData();
+  }, []);
+
+  // Start scheduled posts processor
+  useEffect(() => {
+    // Start processing scheduled posts every minute
+    const stopProcessor = startScheduledPostsProcessor(60000);
+    
+    // Cleanup on unmount
+    return () => stopProcessor();
   }, []);
 
   const updateState = (updates: Partial<AppState>) => {
@@ -120,6 +131,7 @@ const App: React.FC = () => {
               <Route path="/crm" element={<CRM state={state} updateState={updateState} />} />
               <Route path="/knowledge" element={<KnowledgeBase state={state} updateState={updateState} />} />
               <Route path="/settings" element={<SettingsView state={state} updateState={updateState} />} />
+              <Route path="/oauth-callback" element={<OAuthCallback />} />
             </Routes>
           </div>
         </main>

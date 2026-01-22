@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { AppState, Integration, AgentRole } from '../types';
-import { Shield, Mail, Linkedin, Twitter, CheckCircle, AlertCircle, Key, BrainCircuit, ExternalLink, Cpu, Info } from 'lucide-react';
+import { Shield, Mail, Linkedin, Twitter, CheckCircle, AlertCircle, Key, BrainCircuit, ExternalLink, Cpu, Info, Save } from 'lucide-react';
 import { updateAgentConfig, updateIntegration, getSetting, setSetting } from '../services/supabase';
+import { initiateOAuthFlow, IntegrationName, disconnectIntegration } from '../services/oauth';
 
 const AVAILABLE_MODULES: Record<AgentRole, string[]> = {
   Researcher: ['Search Grounding', 'Web Scraping', 'Lead Verification', 'Competitor Intelligence'],
@@ -21,19 +21,43 @@ const SettingsView: React.FC<{ state: AppState; updateState: (u: Partial<AppStat
   const [geminiKey, setGeminiKey] = useState('');
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [savedKey, setSavedKey] = useState<string | null>(null);
+  
+  // OAuth credentials
+  const [googleClientId, setGoogleClientId] = useState('');
+  const [googleClientSecret, setGoogleClientSecret] = useState('');
+  const [linkedinClientId, setLinkedinClientId] = useState('');
+  const [linkedinClientSecret, setLinkedinClientSecret] = useState('');
+  const [twitterClientId, setTwitterClientId] = useState('');
+  const [twitterClientSecret, setTwitterClientSecret] = useState('');
+  
+  const [savingCredentials, setSavingCredentials] = useState(false);
+  const [credentialsSaved, setCredentialsSaved] = useState(false);
+  const [showGuide, setShowGuide] = useState<string | null>(null);
+  const [connectingIntegration, setConnectingIntegration] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadKey = async () => {
+    const loadKeys = async () => {
       try {
-        const key = await getSetting('geminiApiKey');
-        if (key) {
-          setSavedKey(key);
-        }
+        const gemini = await getSetting('geminiApiKey');
+        const googleCId = await getSetting('googleClientId');
+        const googleCSecret = await getSetting('googleClientSecret');
+        const linkedinCId = await getSetting('linkedinClientId');
+        const linkedinCSecret = await getSetting('linkedinClientSecret');
+        const twitterCId = await getSetting('twitterClientId');
+        const twitterCSecret = await getSetting('twitterClientSecret');
+        
+        if (gemini) setSavedKey(gemini);
+        if (googleCId) setGoogleClientId(googleCId);
+        if (googleCSecret) setGoogleClientSecret(googleCSecret);
+        if (linkedinCId) setLinkedinClientId(linkedinCId);
+        if (linkedinCSecret) setLinkedinClientSecret(linkedinCSecret);
+        if (twitterCId) setTwitterClientId(twitterCId);
+        if (twitterCSecret) setTwitterClientSecret(twitterCSecret);
       } catch (err) {
-        console.error('Failed to load Gemini key:', err);
+        console.error('Failed to load API keys:', err);
       }
     };
-    loadKey();
+    loadKeys();
   }, []);
 
   const handleSaveGeminiKey = async () => {
@@ -58,10 +82,7 @@ const SettingsView: React.FC<{ state: AppState; updateState: (u: Partial<AppStat
     const newModules = has ? config.modules.filter(m => m !== mod) : [...config.modules, mod];
     
     try {
-      // Update in Supabase
       await updateAgentConfig(role, { modules: newModules });
-      
-      // Update local state
       const updated = state.agentConfigs.map(c => 
         c.role === role ? { ...c, modules: newModules } : c
       );
@@ -74,10 +95,7 @@ const SettingsView: React.FC<{ state: AppState; updateState: (u: Partial<AppStat
 
   const handleModelChange = async (role: AgentRole, modelId: string) => {
     try {
-      // Update in Supabase
       await updateAgentConfig(role, { selectedModel: modelId });
-      
-      // Update local state
       const updated = state.agentConfigs.map(config => 
         config.role === role ? { ...config, selectedModel: modelId } : config
       );
@@ -88,26 +106,85 @@ const SettingsView: React.FC<{ state: AppState; updateState: (u: Partial<AppStat
     }
   };
 
-  const handleConnect = async (id: string) => {
+  const handleSaveOAuthCredentials = async () => {
+    setSavingCredentials(true);
+    setCredentialsSaved(false);
     try {
-      // Update in Supabase
-      await updateIntegration(id, true);
+      await Promise.all([
+        setSetting('googleClientId', googleClientId),
+        setSetting('googleClientSecret', googleClientSecret),
+        setSetting('linkedinClientId', linkedinClientId),
+        setSetting('linkedinClientSecret', linkedinClientSecret),
+        setSetting('twitterClientId', twitterClientId),
+        setSetting('twitterClientSecret', twitterClientSecret)
+      ]);
+      setCredentialsSaved(true);
+      setTimeout(() => setCredentialsSaved(false), 3000);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save OAuth credentials. Please try again.');
+    } finally {
+      setSavingCredentials(false);
+    }
+  };
+
+  const handleConnect = async (integration: Integration) => {
+    // Check if OAuth credentials are configured
+    if (integration.name === 'Gmail' && (!googleClientId || !googleClientSecret)) {
+      alert('Please configure Google OAuth credentials first in the API Configuration section above.');
+      return;
+    }
+    if (integration.name === 'LinkedIn' && (!linkedinClientId || !linkedinClientSecret)) {
+      alert('Please configure LinkedIn OAuth credentials first in the API Configuration section above.');
+      return;
+    }
+    if (integration.name === 'Twitter' && (!twitterClientId || !twitterClientSecret)) {
+      alert('Please configure Twitter OAuth credentials first in the API Configuration section above.');
+      return;
+    }
+
+    setConnectingIntegration(integration.id);
+
+    try {
+      // Initiate OAuth flow
+      await initiateOAuthFlow(integration.name as IntegrationName);
       
       // Update local state
       const updatedIntegrations = state.integrations.map(int => 
-        int.id === id ? { ...int, isConnected: true } : int
+        int.id === integration.id ? { ...int, isConnected: true } : int
+      );
+      updateState({ integrations: updatedIntegrations });
+      
+      alert(`✅ ${integration.name} connected successfully!`);
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Failed to connect integration. Please try again.");
+    } finally {
+      setConnectingIntegration(null);
+    }
+  };
+
+  const handleDisconnect = async (integration: Integration) => {
+    if (!confirm(`Disconnect ${integration.name}?`)) return;
+    
+    try {
+      await disconnectIntegration(integration.name as IntegrationName);
+      
+      const updatedIntegrations = state.integrations.map(int => 
+        int.id === integration.id ? { ...int, isConnected: false } : int
       );
       updateState({ integrations: updatedIntegrations });
     } catch (err) {
       console.error(err);
-      alert("Failed to connect integration. Please try again.");
+      alert("Failed to disconnect. Please try again.");
     }
   };
 
   return (
     <div className="max-w-5xl mx-auto space-y-12 pb-24">
+      {/* Gemini API Key */}
       <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-        <h2 className="text-2xl font-bold mb-6 flex items-center gap-3"><BrainCircuit className="text-indigo-600" /> API Engine</h2>
+        <h2 className="text-2xl font-bold mb-6 flex items-center gap-3"><BrainCircuit className="text-indigo-600" /> Gemini AI</h2>
         <div className="p-6 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4">
@@ -152,11 +229,183 @@ const SettingsView: React.FC<{ state: AppState; updateState: (u: Partial<AppStat
           )}
           
           <div className="text-xs text-slate-500 pt-2">
-            Get your API key from: <a href="https://aistudio.google.com/apikey" target="_blank" className="text-indigo-600 hover:underline">Google AI Studio</a>
+            Get your API key from: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">Google AI Studio</a>
           </div>
         </div>
       </div>
 
+      {/* OAuth API Configuration */}
+      <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+        <h2 className="text-2xl font-bold mb-6 flex items-center gap-3"><Key className="text-indigo-600" /> OAuth API Configuration</h2>
+        
+        <div className="space-y-6">
+          {/* Google OAuth */}
+          <div className="p-6 bg-slate-50 rounded-xl border border-slate-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <Mail className="text-slate-600" />
+                <h3 className="font-bold text-slate-900">Google OAuth (Gmail)</h3>
+              </div>
+              <button
+                onClick={() => setShowGuide(showGuide === 'google' ? null : 'google')}
+                className="text-sm text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1"
+              >
+                <Info size={16} />
+                {showGuide === 'google' ? 'Hide Guide' : 'Setup Guide'}
+              </button>
+            </div>
+            
+            {showGuide === 'google' && (
+              <div className="mb-4 p-4 bg-indigo-50 rounded-lg text-sm space-y-2">
+                <p className="font-bold">Setup Instructions:</p>
+                <ol className="list-decimal list-inside space-y-1 text-slate-700">
+                  <li>Go to <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" className="text-indigo-600 underline">Google Cloud Console</a></li>
+                  <li>Create/select project → Enable Gmail API</li>
+                  <li>Create OAuth 2.0 Client ID (Web application)</li>
+                  <li>Add redirect URI: <code className="bg-white px-1 py-0.5 rounded">{window.location.origin}/#/oauth-callback</code></li>
+                  <li>Copy Client ID and Secret below</li>
+                </ol>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input
+                type="text"
+                placeholder="Google Client ID"
+                className="px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                value={googleClientId}
+                onChange={(e) => setGoogleClientId(e.target.value)}
+              />
+              <input
+                type="password"
+                placeholder="Google Client Secret"
+                className="px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                value={googleClientSecret}
+                onChange={(e) => setGoogleClientSecret(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* LinkedIn OAuth */}
+          <div className="p-6 bg-slate-50 rounded-xl border border-slate-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <Linkedin className="text-slate-600" />
+                <h3 className="font-bold text-slate-900">LinkedIn OAuth</h3>
+              </div>
+              <button
+                onClick={() => setShowGuide(showGuide === 'linkedin' ? null : 'linkedin')}
+                className="text-sm text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1"
+              >
+                <Info size={16} />
+                {showGuide === 'linkedin' ? 'Hide Guide' : 'Setup Guide'}
+              </button>
+            </div>
+            
+            {showGuide === 'linkedin' && (
+              <div className="mb-4 p-4 bg-indigo-50 rounded-lg text-sm space-y-2">
+                <p className="font-bold">Setup Instructions:</p>
+                <ol className="list-decimal list-inside space-y-1 text-slate-700">
+                  <li>Go to <a href="https://www.linkedin.com/developers" target="_blank" rel="noreferrer" className="text-indigo-600 underline">LinkedIn Developers</a></li>
+                  <li>Create a new app</li>
+                  <li>In Auth tab, add redirect URL: <code className="bg-white px-1 py-0.5 rounded">{window.location.origin}/#/oauth-callback</code></li>
+                  <li>Request scopes: openid, profile, w_member_social</li>
+                  <li>Copy Client ID and Secret below</li>
+                </ol>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input
+                type="text"
+                placeholder="LinkedIn Client ID"
+                className="px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                value={linkedinClientId}
+                onChange={(e) => setLinkedinClientId(e.target.value)}
+              />
+              <input
+                type="password"
+                placeholder="LinkedIn Client Secret"
+                className="px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                value={linkedinClientSecret}
+                onChange={(e) => setLinkedinClientSecret(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Twitter OAuth */}
+          <div className="p-6 bg-slate-50 rounded-xl border border-slate-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <Twitter className="text-slate-600" />
+                <h3 className="font-bold text-slate-900">Twitter/X OAuth</h3>
+              </div>
+              <button
+                onClick={() => setShowGuide(showGuide === 'twitter' ? null : 'twitter')}
+                className="text-sm text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1"
+              >
+                <Info size={16} />
+                {showGuide === 'twitter' ? 'Hide Guide' : 'Setup Guide'}
+              </button>
+            </div>
+            
+            {showGuide === 'twitter' && (
+              <div className="mb-4 p-4 bg-indigo-50 rounded-lg text-sm space-y-2">
+                <p className="font-bold">Setup Instructions:</p>
+                <ol className="list-decimal list-inside space-y-1 text-slate-700">
+                  <li>Go to <a href="https://developer.twitter.com/portal" target="_blank" rel="noreferrer" className="text-indigo-600 underline">Twitter Developer Portal</a></li>
+                  <li>Create project and app</li>
+                  <li>Set up OAuth 2.0 (Web App)</li>
+                  <li>Callback URL: <code className="bg-white px-1 py-0.5 rounded">{window.location.origin}/#/oauth-callback</code></li>
+                  <li>Copy Client ID and Secret below</li>
+                </ol>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input
+                type="text"
+                placeholder="Twitter Client ID"
+                className="px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                value={twitterClientId}
+                onChange={(e) => setTwitterClientId(e.target.value)}
+              />
+              <input
+                type="password"
+                placeholder="Twitter Client Secret"
+                className="px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                value={twitterClientSecret}
+                onChange={(e) => setTwitterClientSecret(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            {credentialsSaved && (
+              <div className="flex items-center gap-2 text-emerald-600 font-bold">
+                <CheckCircle size={20} />
+                <span>Credentials Saved!</span>
+              </div>
+            )}
+            <button
+              onClick={handleSaveOAuthCredentials}
+              disabled={savingCredentials}
+              className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 disabled:bg-slate-300 flex items-center gap-2"
+            >
+              {savingCredentials ? (
+                <>Saving...</>
+              ) : (
+                <>
+                  <Save size={20} />
+                  Save API Credentials
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Agent Configuration */}
       <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
         <h2 className="text-2xl font-bold mb-8 flex items-center gap-3"><Cpu className="text-indigo-600" /> Agent Orchestration</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -184,8 +433,9 @@ const SettingsView: React.FC<{ state: AppState; updateState: (u: Partial<AppStat
         </div>
       </div>
 
+      {/* Connected Channels */}
       <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-        <h2 className="text-2xl font-bold mb-6 flex items-center gap-3"><Shield className="text-indigo-600" /> Channels</h2>
+        <h2 className="text-2xl font-bold mb-6 flex items-center gap-3"><Shield className="text-indigo-600" /> Connected Channels</h2>
         <div className="space-y-4">
           {state.integrations.map(int => (
             <div key={int.id} className="p-6 border border-slate-200 rounded-xl flex items-center justify-between">
@@ -197,10 +447,27 @@ const SettingsView: React.FC<{ state: AppState; updateState: (u: Partial<AppStat
                 </div>
                 <div>
                   <div className="font-bold text-slate-900">{int.name}</div>
-                  <div className="text-sm text-slate-500">{int.isConnected ? `Linked Account` : 'Offline'}</div>
+                  <div className="text-sm text-slate-500">{int.isConnected ? `✓ Connected` : 'Not connected'}</div>
                 </div>
               </div>
-              {!int.isConnected && <button onClick={() => handleConnect(int.id)} className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold">Connect</button>}
+              <div className="flex gap-2">
+                {!int.isConnected ? (
+                  <button 
+                    onClick={() => handleConnect(int)} 
+                    disabled={connectingIntegration === int.id}
+                    className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:bg-slate-300"
+                  >
+                    {connectingIntegration === int.id ? 'Connecting...' : 'Connect'}
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => handleDisconnect(int)} 
+                    className="px-6 py-2 bg-slate-200 text-slate-700 rounded-lg font-bold hover:bg-slate-300"
+                  >
+                    Disconnect
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
