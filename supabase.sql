@@ -165,6 +165,15 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+-- Drop existing triggers if they exist
+DROP TRIGGER IF EXISTS update_leads_updated_at ON leads;
+DROP TRIGGER IF EXISTS update_knowledge_base_updated_at ON knowledge_base;
+DROP TRIGGER IF EXISTS update_social_posts_updated_at ON social_posts;
+DROP TRIGGER IF EXISTS update_integrations_updated_at ON integrations;
+DROP TRIGGER IF EXISTS update_agent_configs_updated_at ON agent_configs;
+DROP TRIGGER IF EXISTS update_settings_updated_at ON settings;
+DROP TRIGGER IF EXISTS update_usage_tracking_updated_at ON usage_tracking;
+
 -- Create triggers for updated_at
 CREATE TRIGGER update_leads_updated_at BEFORE UPDATE ON leads
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -199,6 +208,7 @@ CREATE TABLE IF NOT EXISTS email_templates (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+DROP TRIGGER IF EXISTS update_email_templates_updated_at ON email_templates;
 CREATE TRIGGER update_email_templates_updated_at BEFORE UPDATE ON email_templates
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -234,6 +244,7 @@ CREATE TABLE IF NOT EXISTS ab_test_variants (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+DROP TRIGGER IF EXISTS update_ab_tests_updated_at ON ab_tests;
 CREATE TRIGGER update_ab_tests_updated_at BEFORE UPDATE ON ab_tests
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -269,6 +280,7 @@ CREATE TABLE IF NOT EXISTS webhook_logs (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+DROP TRIGGER IF EXISTS update_webhooks_updated_at ON webhooks;
 CREATE TRIGGER update_webhooks_updated_at BEFORE UPDATE ON webhooks
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -293,6 +305,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+DROP TRIGGER IF EXISTS update_user_profiles_updated_at ON user_profiles;
 CREATE TRIGGER update_user_profiles_updated_at BEFORE UPDATE ON user_profiles
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
