@@ -379,18 +379,24 @@ export async function getSetting(key: string): Promise<any> {
     .from('settings')
     .select('value')
     .eq('key', key)
-    .single();
+    .maybeSingle();
 
-  if (error) throw error;
-  return data?.value;
+  if (error) {
+    console.error('Error fetching setting:', error);
+    return null;
+  }
+  return data?.value || null;
 }
 
 export async function setSetting(key: string, value: any): Promise<void> {
   const { error } = await supabase
     .from('settings')
-    .upsert({ key, value });
+    .upsert({ key, value }, { onConflict: 'key' });
 
-  if (error) throw error;
+  if (error) {
+    console.error('Error setting value:', error);
+    throw error;
+  }
 }
 
 // Usage Tracking

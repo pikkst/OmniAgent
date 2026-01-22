@@ -114,8 +114,16 @@ INSERT INTO usage_tracking (total_spend, total_tokens_used) VALUES (0, 0);
 INSERT INTO settings (key, value) VALUES
   ('websiteUrl', '""'::jsonb),
   ('businessContext', '""'::jsonb),
-  ('geminiApiKey', '""'::jsonb)
-ON CONFLICT (key) DO NOTHING;
+  ('geminiApiKey', '""'::jsonb),
+  ('googleClientId', '""'::jsonb),
+  ('googleClientSecret', '""'::jsonb),
+  ('linkedinClientId', '""'::jsonb),
+  ('linkedinClientSecret', '""'::jsonb),
+  ('twitterClientId', '""'::jsonb),
+  ('twitterClientSecret', '""'::jsonb),
+  ('facebookClientId', '""'::jsonb),
+  ('facebookClientSecret', '""'::jsonb)
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
