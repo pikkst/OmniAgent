@@ -99,13 +99,6 @@ CREATE TABLE IF NOT EXISTS usage_tracking (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Insert default integrations
-INSERT INTO integrations (name, is_connected) VALUES
-  ('Gmail', false),
-  ('LinkedIn', false),
-  ('Twitter', false)
-ON CONFLICT (name) DO NOTHING;
-
 -- Insert default agent configs
 INSERT INTO agent_configs (role, selected_model, modules) VALUES
   ('Researcher', 'gemini-3-pro-preview', ARRAY['Search Grounding', 'Web Scraping']),

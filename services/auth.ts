@@ -396,3 +396,30 @@ export async function activateUser(userId: string): Promise<void> {
   await requirePermission('users', 'update');
   await updateUserProfile(userId, { isActive: true });
 }
+
+/**
+ * Auth service object for easier imports
+ */
+export const authService = {
+  signUp,
+  signIn,
+  signOut,
+  getCurrentUser,
+  getUserProfile,
+  updateUserProfile,
+  onAuthStateChange: (callback: (user: any) => void) => {
+    return supabase.auth.onAuthStateChange((_event, session) => {
+      callback(session?.user || null);
+    });
+  },
+  hasPermission,
+  requirePermission,
+  getRoleDisplayName,
+  getRoleDescription,
+  resetPassword,
+  updatePassword,
+  inviteUser,
+  changeUserRole,
+  deactivateUser,
+  activateUser
+};
