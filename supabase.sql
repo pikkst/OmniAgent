@@ -70,6 +70,20 @@ BEGIN
   END IF;
 END $$;
 
+-- Add new unique constraints for user-specific data
+DO $$
+BEGIN
+  -- Add unique constraint for integrations (user_id, name)
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'integrations_user_id_name_key') THEN
+    ALTER TABLE integrations ADD CONSTRAINT integrations_user_id_name_key UNIQUE (user_id, name);
+  END IF;
+
+  -- Add unique constraint for settings (user_id, key)
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'settings_user_id_key_key') THEN
+    ALTER TABLE settings ADD CONSTRAINT settings_user_id_key_key UNIQUE (user_id, key);
+  END IF;
+END $$;
+
 -- Leads table
 CREATE TABLE IF NOT EXISTS leads (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
