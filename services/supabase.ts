@@ -13,6 +13,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 // Database types
 interface DbLead {
   id: string;
+  user_id: string;
   name: string;
   email: string | null;
   company: string;
@@ -149,18 +150,32 @@ const dbAgentConfigToAgentConfig = (dbConfig: DbAgentConfig): AgentModuleConfig 
 
 // CRUD Operations
 
+// Get current user ID
+async function getCurrentUserId(): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('User not authenticated');
+  return user.id;
+}
+
 // Leads
 export async function getLeads(): Promise<Lead[]> {
+  const userId = await getCurrentUserId();
+  
   const { data: leads, error: leadsError } = await supabase
     .from('leads')
     .select('*')
+    .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   if (leadsError) throw leadsError;
 
+  const leadIds = (leads || []).map(l => l.id);
+  if (leadIds.length === 0) return [];
+
   const { data: allInteractions, error: intError } = await supabase
     .from('interactions')
     .select('*')
+    .in('lead_id', leadIds)
     .order('created_at', { ascending: false });
 
   if (intError) throw intError;
@@ -175,9 +190,12 @@ export async function getLeads(): Promise<Lead[]> {
 }
 
 export async function createLead(lead: Omit<Lead, 'id' | 'interactions'>): Promise<Lead> {
+  const userId = await getCurrentUserId();
+  
   const { data, error } = await supabase
     .from('leads')
     .insert({
+      user_id: userId,
       name: lead.name,
       email: lead.email || null,
       company: lead.company,
@@ -251,9 +269,12 @@ export async function createInteraction(interaction: Omit<Interaction, 'id'> & {
 
 // Knowledge Base
 export async function getKnowledgeBase(): Promise<KnowledgeEntry[]> {
+  const userId = await getCurrentUserId();
+  
   const { data, error } = await supabase
     .from('knowledge_base')
     .select('*')
+    .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -261,9 +282,12 @@ export async function getKnowledgeBase(): Promise<KnowledgeEntry[]> {
 }
 
 export async function createKnowledgeEntry(entry: Omit<KnowledgeEntry, 'id' | 'timestamp'>): Promise<KnowledgeEntry> {
+  const userId = await getCurrentUserId();
+  
   const { data, error } = await supabase
     .from('knowledge_base')
     .insert({
+      user_id: userId,
       topic: entry.topic,
       content: entry.content,
       source: entry.source
@@ -286,9 +310,12 @@ export async function deleteKnowledgeEntry(id: string): Promise<void> {
 
 // Social Posts
 export async function getSocialPosts(): Promise<SocialPost[]> {
+  const userId = await getCurrentUserId();
+  
   const { data, error } = await supabase
     .from('social_posts')
     .select('*')
+    .eq('user_id', userId)
     .order('scheduled_time', { ascending: false });
 
   if (error) throw error;
@@ -296,9 +323,12 @@ export async function getSocialPosts(): Promise<SocialPost[]> {
 }
 
 export async function createSocialPost(post: Omit<SocialPost, 'id' | 'metrics'>): Promise<SocialPost> {
+  const userId = await getCurrentUserId();
+  
   const { data, error } = await supabase
     .from('social_posts')
     .insert({
+      user_id: userId,
       platform: post.platform,
       content: post.content,
       scheduled_time: post.scheduledTime,
@@ -332,9 +362,12 @@ export async function updateSocialPost(id: string, updates: Partial<SocialPost>)
 
 // Integrations
 export async function getIntegrations(): Promise<Integration[]> {
+  const userId = await getCurrentUserId();
+  
   const { data, error } = await supabase
     .from('integrations')
     .select('*')
+    .eq('user_id', userId)
     .order('name');
 
   if (error) throw error;
@@ -346,6 +379,23 @@ export async function updateIntegration(id: string, isConnected: boolean): Promi
     .from('integrations')
     .update({ is_connected: isConnected })
     .eq('id', id);
+
+  if (error) throw error;
+}
+
+export async function createIntegration(name: string, config?: any): Promise<void> {
+  const userId = await getCurrentUserId();
+  
+  const { error } = await supabase
+    .from('integrations')
+    .upsert({
+      user_id: userId,
+      name,
+      is_connected: false,
+      config: config || {}
+    }, {
+      onConflict: 'user_id,name'
+    });
 
   if (error) throw error;
 }
@@ -375,9 +425,12 @@ export async function updateAgentConfig(role: string, config: Partial<AgentModul
 
 // Settings
 export async function getSetting(key: string): Promise<any> {
+  const userId = await getCurrentUserId();
+  
   const { data, error } = await supabase
     .from('settings')
     .select('value')
+    .eq('user_id', userId)
     .eq('key', key)
     .maybeSingle();
 
@@ -389,9 +442,17 @@ export async function getSetting(key: string): Promise<any> {
 }
 
 export async function setSetting(key: string, value: any): Promise<void> {
+  const userId = await getCurrentUserId();
+  
   const { error } = await supabase
     .from('settings')
-    .upsert({ key, value }, { onConflict: 'key' });
+    .upsert({ 
+      user_id: userId,
+      key, 
+      value 
+    }, { 
+      onConflict: 'user_id,key' 
+    });
 
   if (error) {
     console.error('Error setting value:', error);

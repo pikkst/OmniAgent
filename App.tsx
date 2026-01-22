@@ -9,7 +9,8 @@ import {
   Settings, 
   BrainCircuit, 
   BarChart3,
-  Mail
+  Mail,
+  LogOut
 } from 'lucide-react';
 import Dashboard from './views/Dashboard';
 import LeadFinder from './views/LeadFinder';
@@ -19,11 +20,15 @@ import CRM from './views/CRM';
 import SettingsView from './views/SettingsView';
 import EmailTemplatesView from './views/EmailTemplatesView';
 import OAuthCallback from './views/OAuthCallback';
+import { AuthView } from './views/AuthView';
 import { AppState, AgentModuleConfig } from './types';
 import { loadAllData } from './services/supabase';
 import { startScheduledPostsProcessor } from './services/scheduler';
+import { authService } from './services/auth';
 
 const App: React.FC = () => {
+  const [user, setUser] = useState<any>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [state, setState] = useState<AppState>({
     websiteUrl: '',
     businessContext: '',
@@ -38,21 +43,51 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load data from Supabase on mount
+  // Check authentication status
   useEffect(() => {
-    const loadData = async () => {
+    const checkAuth = async () => {
       try {
-        const data = await loadAllData();
-        setState(data);
+        const currentUser = await authService.getCurrentUser();
+        setUser(currentUser);
       } catch (err) {
-        console.error('Failed to load data from Supabase:', err);
-        setError('Failed to connect to database. Please check your .env configuration.');
+        console.error('Auth check failed:', err);
+        setUser(null);
       } finally {
-        setLoading(false);
+        setCheckingAuth(false);
       }
     };
-    loadData();
+    checkAuth();
+
+    // Listen for auth state changes
+    const { data: { subscription } } = authService.onAuthStateChange((user) => {
+      setUser(user);
+      if (user) {
+        // Reload data when user logs in
+        loadData();
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  // Load data from Supabase on mount
+  const loadData = async () => {
+    try {
+      const data = await loadAllData();
+      setState(data);
+    } catch (err) {
+      console.error('Failed to load data from Supabase:', err);
+      setError('Failed to connect to database. Please check your configuration.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      loadData();
+    }
+  }, [user]);
 
   // Start scheduled posts processor
   useEffect(() => {
@@ -66,6 +101,41 @@ const App: React.FC = () => {
   const updateState = (updates: Partial<AppState>) => {
     setState(prev => ({ ...prev, ...updates }));
   };
+
+  const handleLogout = async () => {
+    try {
+      await authService.signOut();
+      setUser(null);
+      setState({
+        websiteUrl: '',
+        businessContext: '',
+        knowledgeBase: [],
+        leads: [],
+        posts: [],
+        integrations: [],
+        agentConfigs: [],
+        totalSpend: 0,
+        totalTokensUsed: 0
+      });
+    } catch (err) {
+      console.error('Logout failed:', err);
+    }
+  };
+
+  if (checkingAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <BrainCircuit className="w-12 h-12 text-indigo-600 animate-pulse mx-auto mb-4" />
+          <p className="text-slate-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthView />;
+  }
 
   if (loading) {
     return (
@@ -123,6 +193,17 @@ const App: React.FC = () => {
                   <div key={int.id} title={`${int.name}: ${int.isConnected ? 'Connected' : 'Offline'}`} 
                     className={`w-2 h-2 rounded-full ${int.isConnected ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                 ))}
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-slate-600">{user?.email}</span>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                  title="Sign out"
+                >
+                  <LogOut size={16} />
+                  <span>Logout</span>
+                </button>
               </div>
             </div>
           </header>

@@ -180,6 +180,49 @@ const SettingsView: React.FC<{ state: AppState; updateState: (u: Partial<AppStat
     }
   };
 
+  const handleConnectAll = async () => {
+    // Check if all OAuth credentials are configured
+    const missingCredentials = [];
+    if (!googleClientId || !googleClientSecret) missingCredentials.push('Google');
+    if (!linkedinClientId || !linkedinClientSecret) missingCredentials.push('LinkedIn');
+    if (!twitterClientId || !twitterClientSecret) missingCredentials.push('Twitter');
+
+    if (missingCredentials.length > 0) {
+      alert(`Please configure OAuth credentials for: ${missingCredentials.join(', ')}`);
+      return;
+    }
+
+    const disconnectedIntegrations = state.integrations.filter(int => !int.isConnected);
+    if (disconnectedIntegrations.length === 0) {
+      alert('All integrations are already connected!');
+      return;
+    }
+
+    if (!confirm(`Connect all ${disconnectedIntegrations.length} disconnected integrations?`)) return;
+
+    for (const integration of disconnectedIntegrations) {
+      try {
+        setConnectingIntegration(integration.id);
+        await initiateOAuthFlow(integration.name as IntegrationName);
+        
+        const updatedIntegrations = state.integrations.map(int => 
+          int.id === integration.id ? { ...int, isConnected: true } : int
+        );
+        updateState({ integrations: updatedIntegrations });
+        
+        // Wait a bit between connections to avoid overwhelming the OAuth servers
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (err) {
+        console.error(`Failed to connect ${integration.name}:`, err);
+        alert(`Failed to connect ${integration.name}. Stopping batch connection.`);
+        break;
+      }
+    }
+
+    setConnectingIntegration(null);
+    alert('✅ Batch connection completed!');
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-12 pb-24">
       {/* Gemini API Key */}
@@ -435,9 +478,18 @@ const SettingsView: React.FC<{ state: AppState; updateState: (u: Partial<AppStat
 
       {/* Connected Channels */}
       <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-        <h2 className="text-2xl font-bold mb-6 flex items-center gap-3"><Shield className="text-indigo-600" /> Connected Channels</h2>
-        <div className="space-y-4">
-          {state.integrations.map(int => (
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold flex items-center gap-3"><Shield className="text-indigo-600" /> Connected Channels</h2>
+          <button
+            onClick={handleConnectAll}
+            disabled={!!connectingIntegration}
+            className="px-6 py-2 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 disabled:bg-slate-300 flex items-center gap-2"
+          >
+            <CheckCircle size={18} />
+            {connectingIntegration ? 'Connecting...' : 'Connect All'}
+          </button>
+        </div>
+        <div className="space-y-4">{state.integrations.map(int => (
             <div key={int.id} className="p-6 border border-slate-200 rounded-xl flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className={`p-3 rounded-xl ${int.isConnected ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100'}`}>

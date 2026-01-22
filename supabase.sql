@@ -7,6 +7,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Leads table
 CREATE TABLE IF NOT EXISTS leads (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   email TEXT,
   company TEXT NOT NULL,
@@ -34,6 +35,7 @@ CREATE TABLE IF NOT EXISTS interactions (
 -- Knowledge base table
 CREATE TABLE IF NOT EXISTS knowledge_base (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   topic TEXT NOT NULL,
   content TEXT NOT NULL,
   source TEXT NOT NULL CHECK (source IN ('website', 'manual')),
@@ -44,6 +46,7 @@ CREATE TABLE IF NOT EXISTS knowledge_base (
 -- Social posts table
 CREATE TABLE IF NOT EXISTS social_posts (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   platform TEXT NOT NULL CHECK (platform IN ('LinkedIn', 'Twitter', 'Facebook', 'Instagram')),
   content TEXT NOT NULL,
   scheduled_time TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -58,11 +61,13 @@ CREATE TABLE IF NOT EXISTS social_posts (
 -- Integrations table
 CREATE TABLE IF NOT EXISTS integrations (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name TEXT NOT NULL UNIQUE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
   is_connected BOOLEAN DEFAULT FALSE,
   config JSONB,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, name)
 );
 
 -- Agent configurations table
@@ -78,10 +83,12 @@ CREATE TABLE IF NOT EXISTS agent_configs (
 -- Settings table
 CREATE TABLE IF NOT EXISTS settings (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  key TEXT NOT NULL UNIQUE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  key TEXT NOT NULL,
   value JSONB NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, key)
 );
 
 -- Usage tracking table
@@ -110,22 +117,8 @@ ON CONFLICT (role) DO NOTHING;
 -- Insert default usage tracking
 INSERT INTO usage_tracking (total_spend, total_tokens_used) VALUES (0, 0);
 
--- Insert default settings
-INSERT INTO settings (key, value) VALUES
-  ('websiteUrl', '""'::jsonb),
-  ('businessContext', '""'::jsonb),
-  ('geminiApiKey', '""'::jsonb),
-  ('googleClientId', '""'::jsonb),
-  ('googleClientSecret', '""'::jsonb),
-  ('linkedinClientId', '""'::jsonb),
-  ('linkedinClientSecret', '""'::jsonb),
-  ('twitterClientId', '""'::jsonb),
-  ('twitterClientSecret', '""'::jsonb),
-  ('facebookClientId', '""'::jsonb),
-  ('facebookClientSecret', '""'::jsonb)
-ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
-
 -- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_leads_user_id ON leads(user_id);
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_interactions_lead_id ON interactions(lead_id);
@@ -153,15 +146,38 @@ DROP POLICY IF EXISTS "Allow all operations" ON integrations;
 DROP POLICY IF EXISTS "Allow all operations" ON agent_configs;
 DROP POLICY IF EXISTS "Allow all operations" ON settings;
 DROP POLICY IF EXISTS "Allow all operations" ON usage_tracking;
+DROP POLICY IF EXISTS "Users can access own data" ON leads;
+DROP POLICY IF EXISTS "Users can access own data" ON interactions;
+DROP POLICY IF EXISTS "Users can access own data" ON knowledge_base;
+DROP POLICY IF EXISTS "Users can access own data" ON social_posts;
+DROP POLICY IF EXISTS "Users can access own data" ON integrations;
+DROP POLICY IF EXISTS "Users can access own data" ON settings;
 
--- Create policies (allow all for now - adjust based on your auth requirements)
-CREATE POLICY "Allow all operations" ON leads FOR ALL USING (true);
-CREATE POLICY "Allow all operations" ON interactions FOR ALL USING (true);
-CREATE POLICY "Allow all operations" ON knowledge_base FOR ALL USING (true);
-CREATE POLICY "Allow all operations" ON social_posts FOR ALL USING (true);
-CREATE POLICY "Allow all operations" ON integrations FOR ALL USING (true);
+-- Create user-specific policies
+CREATE POLICY "Users can access own data" ON leads
+  FOR ALL USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can access own data" ON interactions
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM leads WHERE leads.id = interactions.lead_id AND leads.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can access own data" ON knowledge_base
+  FOR ALL USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can access own data" ON social_posts
+  FOR ALL USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can access own data" ON integrations
+  FOR ALL USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can access own data" ON settings
+  FOR ALL USING (auth.uid() = user_id);
+
+-- Allow all for agent_configs and usage_tracking (shared)
 CREATE POLICY "Allow all operations" ON agent_configs FOR ALL USING (true);
-CREATE POLICY "Allow all operations" ON settings FOR ALL USING (true);
 CREATE POLICY "Allow all operations" ON usage_tracking FOR ALL USING (true);
 
 -- Function to automatically update updated_at timestamp
@@ -207,6 +223,7 @@ CREATE TRIGGER update_usage_tracking_updated_at BEFORE UPDATE ON usage_tracking
 -- Email templates table
 CREATE TABLE IF NOT EXISTS email_templates (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   subject TEXT NOT NULL,
   body TEXT NOT NULL,
@@ -223,11 +240,14 @@ CREATE TRIGGER update_email_templates_updated_at BEFORE UPDATE ON email_template
 -- Enable RLS for email_templates
 ALTER TABLE email_templates ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all operations" ON email_templates;
-CREATE POLICY "Allow all operations" ON email_templates FOR ALL USING (true);
+DROP POLICY IF EXISTS "Users can access own data" ON email_templates;
+CREATE POLICY "Users can access own data" ON email_templates
+  FOR ALL USING (auth.uid() = user_id OR user_id IS NULL);
 
 -- A/B Testing tables
 CREATE TABLE IF NOT EXISTS ab_tests (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
   type TEXT NOT NULL CHECK (type IN ('email', 'social', 'landing_page')),
@@ -261,12 +281,21 @@ ALTER TABLE ab_tests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ab_test_variants ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all operations" ON ab_tests;
 DROP POLICY IF EXISTS "Allow all operations" ON ab_test_variants;
-CREATE POLICY "Allow all operations" ON ab_tests FOR ALL USING (true);
-CREATE POLICY "Allow all operations" ON ab_test_variants FOR ALL USING (true);
+DROP POLICY IF EXISTS "Users can access own data" ON ab_tests;
+DROP POLICY IF EXISTS "Users can access own data" ON ab_test_variants;
+CREATE POLICY "Users can access own data" ON ab_tests
+  FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Users can access own data" ON ab_test_variants
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM ab_tests WHERE ab_tests.id = ab_test_variants.test_id AND ab_tests.user_id = auth.uid()
+    )
+  );
 
 -- Webhooks tables
 CREATE TABLE IF NOT EXISTS webhooks (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   url TEXT NOT NULL,
   events TEXT[] NOT NULL,
   secret TEXT NOT NULL,
@@ -297,8 +326,16 @@ ALTER TABLE webhooks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE webhook_logs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all operations" ON webhooks;
 DROP POLICY IF EXISTS "Allow all operations" ON webhook_logs;
-CREATE POLICY "Allow all operations" ON webhooks FOR ALL USING (true);
-CREATE POLICY "Allow all operations" ON webhook_logs FOR ALL USING (true);
+DROP POLICY IF EXISTS "Users can access own data" ON webhooks;
+DROP POLICY IF EXISTS "Users can access own data" ON webhook_logs;
+CREATE POLICY "Users can access own data" ON webhooks
+  FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Users can access own data" ON webhook_logs
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM webhooks WHERE webhooks.id = webhook_logs.webhook_id AND webhooks.user_id = auth.uid()
+    )
+  );
 
 -- User profiles and authentication
 CREATE TABLE IF NOT EXISTS user_profiles (
