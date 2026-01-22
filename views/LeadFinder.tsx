@@ -1,10 +1,10 @@
 
 import React, { useState } from 'react';
-// Fixed missing Link import
 import { Link } from 'react-router-dom';
 import { AppState, Lead } from '../types';
 import { Search, Loader2, Globe, CheckCircle2, ExternalLink, ArrowRight } from 'lucide-react';
 import { performMarketResearch } from '../services/gemini';
+import { createLead, setSetting, updateUsageTracking } from '../services/supabase';
 
 const LeadFinder: React.FC<{ state: AppState; updateState: (u: Partial<AppState>) => void }> = ({ state, updateState }) => {
   const [url, setUrl] = useState(state.websiteUrl);
@@ -17,14 +17,27 @@ const LeadFinder: React.FC<{ state: AppState; updateState: (u: Partial<AppState>
     if (!url || !niche) return alert("Please enter both your website URL and target niche.");
     setLoading(true);
     try {
-      // Fix: Pass state as the 4th argument to performMarketResearch
       const result = await performMarketResearch(url, country, niche, state);
       setSources(result.sources || []);
+      
+      // Save each lead to Supabase
+      const savedLeads: Lead[] = [];
+      for (const leadData of result.data.leads) {
+        const savedLead = await createLead(leadData);
+        savedLeads.push(savedLead);
+      }
+      
+      // Save settings to Supabase
+      await setSetting('websiteUrl', url);
+      await setSetting('businessContext', result.data.analysis);
+      
+      // Update usage tracking in Supabase
+      await updateUsageTracking(result.cost, result.tokens);
+      
+      // Update local state
       updateState({ 
-        // Fix: Access data property of result to get leads
-        leads: [...state.leads, ...result.data.leads],
+        leads: [...state.leads, ...savedLeads],
         websiteUrl: url,
-        // Fix: Access data property of result to get analysis
         businessContext: result.data.analysis,
         totalSpend: state.totalSpend + result.cost,
         totalTokensUsed: state.totalTokensUsed + result.tokens

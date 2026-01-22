@@ -2,8 +2,8 @@
 import React, { useState } from 'react';
 import { AppState, Lead } from '../types';
 import { Mail, Share2, PenTool, Sparkles, Send, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
-// Fix: Removed planSocialContent from import as it is not exported from gemini.ts
 import { craftPersonalizedEmail } from '../services/gemini';
+import { createInteraction, updateLead, updateUsageTracking } from '../services/supabase';
 
 const Campaigns: React.FC<{ state: AppState; updateState: (u: Partial<AppState>) => void }> = ({ state, updateState }) => {
   const [activeTab, setActiveTab] = useState<'social' | 'email'>('social');
@@ -21,9 +21,12 @@ const Campaigns: React.FC<{ state: AppState; updateState: (u: Partial<AppState>)
     setIsGenerating(true);
     setIsSent(false);
     try {
-      // Fix: Pass state as the 4th argument and access .data property of AgentResult
       const result = await craftPersonalizedEmail(lead, state.businessContext, state.knowledgeBase, state);
       setDraft(result.data);
+      
+      // Update usage tracking in Supabase
+      await updateUsageTracking(result.cost, result.tokens);
+      
       updateState({
         totalSpend: state.totalSpend + result.cost,
         totalTokensUsed: state.totalTokensUsed + result.tokens
@@ -35,29 +38,38 @@ const Campaigns: React.FC<{ state: AppState; updateState: (u: Partial<AppState>)
     }
   };
 
-  const handleSendEmail = () => {
+  const handleSendEmail = async () => {
     if (!gmailConnected) return alert("Please connect Gmail in Settings first.");
     
-    // Process "Send" - log interaction and update lead status
     const lead = state.leads.find(l => l.id === selectedLeadId);
     if (!lead) return;
 
-    const interaction = {
-      id: Math.random().toString(),
-      type: 'email_sent' as const,
-      content: draft,
-      timestamp: new Date().toISOString(),
-      author: 'agent' as const,
-      cost: 0
-    };
+    try {
+      // Save interaction to Supabase
+      const interaction = await createInteraction({
+        leadId: selectedLeadId,
+        type: 'email_sent',
+        content: draft,
+        timestamp: new Date().toISOString(),
+        author: 'agent',
+        cost: 0
+      });
 
-    const updatedLeads = state.leads.map(l => 
-      l.id === selectedLeadId ? { ...l, status: 'contacted' as const, interactions: [...l.interactions, interaction] } : l
-    );
+      // Update lead status in Supabase
+      await updateLead(selectedLeadId, { status: 'contacted' });
 
-    updateState({ leads: updatedLeads });
-    setIsSent(true);
-    setDraft('');
+      // Update local state
+      const updatedLeads = state.leads.map(l => 
+        l.id === selectedLeadId ? { ...l, status: 'contacted' as const, interactions: [...l.interactions, interaction] } : l
+      );
+
+      updateState({ leads: updatedLeads });
+      setIsSent(true);
+      setDraft('');
+    } catch (err) {
+      console.error(err);
+      alert("Failed to send email. Please try again.");
+    }
   };
 
   return (

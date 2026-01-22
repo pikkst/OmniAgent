@@ -2,7 +2,13 @@
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { Lead, KnowledgeEntry, AppState, TokenUsage } from "../types";
 
-const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getAI = () => {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('VITE_GEMINI_API_KEY is not set in .env file');
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 /**
  * Calculates real USD cost based on token usage metadata from Gemini.

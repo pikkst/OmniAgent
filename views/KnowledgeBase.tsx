@@ -2,27 +2,44 @@
 import React, { useState } from 'react';
 import { AppState, KnowledgeEntry } from '../types';
 import { Plus, Trash2, Database, Brain } from 'lucide-react';
+import { createKnowledgeEntry, deleteKnowledgeEntry } from '../services/supabase';
 
 const KnowledgeBase: React.FC<{ state: AppState; updateState: (u: Partial<AppState>) => void }> = ({ state, updateState }) => {
   const [newTopic, setNewTopic] = useState('');
   const [newContent, setNewContent] = useState('');
 
-  const handleAddEntry = () => {
+  const handleAddEntry = async () => {
     if (!newTopic || !newContent) return;
-    const entry: KnowledgeEntry = {
-      id: Math.random().toString(),
-      topic: newTopic,
-      content: newContent,
-      source: 'manual',
-      timestamp: new Date().toISOString()
-    };
-    updateState({ knowledgeBase: [...state.knowledgeBase, entry] });
-    setNewTopic('');
-    setNewContent('');
+    
+    try {
+      // Save to Supabase
+      const entry = await createKnowledgeEntry({
+        topic: newTopic,
+        content: newContent,
+        source: 'manual'
+      });
+      
+      // Update local state
+      updateState({ knowledgeBase: [...state.knowledgeBase, entry] });
+      setNewTopic('');
+      setNewContent('');
+    } catch (err) {
+      console.error(err);
+      alert("Failed to add knowledge entry. Please try again.");
+    }
   };
 
-  const removeEntry = (id: string) => {
-    updateState({ knowledgeBase: state.knowledgeBase.filter(e => e.id !== id) });
+  const removeEntry = async (id: string) => {
+    try {
+      // Delete from Supabase
+      await deleteKnowledgeEntry(id);
+      
+      // Update local state
+      updateState({ knowledgeBase: state.knowledgeBase.filter(e => e.id !== id) });
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete knowledge entry. Please try again.");
+    }
   };
 
   return (

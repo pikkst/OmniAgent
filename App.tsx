@@ -17,43 +17,66 @@ import KnowledgeBase from './views/KnowledgeBase';
 import CRM from './views/CRM';
 import SettingsView from './views/SettingsView';
 import { AppState, AgentModuleConfig } from './types';
-
-const defaultAgentConfigs: AgentModuleConfig[] = [
-  { role: 'Researcher', selectedModel: 'gemini-3-pro-preview', modules: ['Search Grounding', 'Web Scraping'] },
-  { role: 'Copywriter', selectedModel: 'gemini-3-flash-preview', modules: ['Multilingual Support'] },
-  { role: 'CRM', selectedModel: 'gemini-3-pro-preview', modules: ['Memory Bank Access'] },
-  { role: 'Strategist', selectedModel: 'gemini-3-flash-preview', modules: ['Trend Analysis'] }
-];
+import { loadAllData } from './services/supabase';
 
 const App: React.FC = () => {
-  const [state, setState] = useState<AppState>(() => {
-    const saved = localStorage.getItem('omniagent_v2_state');
-    if (saved) return JSON.parse(saved);
-    
-    return {
-      websiteUrl: '',
-      businessContext: '',
-      knowledgeBase: [],
-      leads: [],
-      posts: [],
-      integrations: [
-        { id: '1', name: 'Gmail', isConnected: false },
-        { id: '2', name: 'LinkedIn', isConnected: false },
-        { id: '3', name: 'Twitter', isConnected: false }
-      ],
-      agentConfigs: defaultAgentConfigs,
-      totalSpend: 0,
-      totalTokensUsed: 0
-    };
+  const [state, setState] = useState<AppState>({
+    websiteUrl: '',
+    businessContext: '',
+    knowledgeBase: [],
+    leads: [],
+    posts: [],
+    integrations: [],
+    agentConfigs: [],
+    totalSpend: 0,
+    totalTokensUsed: 0
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  // Load data from Supabase on mount
   useEffect(() => {
-    localStorage.setItem('omniagent_v2_state', JSON.stringify(state));
-  }, [state]);
+    const loadData = async () => {
+      try {
+        const data = await loadAllData();
+        setState(data);
+      } catch (err) {
+        console.error('Failed to load data from Supabase:', err);
+        setError('Failed to connect to database. Please check your .env configuration.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
 
   const updateState = (updates: Partial<AppState>) => {
     setState(prev => ({ ...prev, ...updates }));
   };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <BrainCircuit className="w-12 h-12 text-indigo-600 animate-pulse mx-auto mb-4" />
+          <p className="text-slate-600">Loading OmniAgent...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="text-center bg-white p-8 rounded-2xl shadow-lg max-w-md">
+          <div className="text-red-600 mb-4">⚠️</div>
+          <h2 className="text-xl font-bold mb-2">Connection Error</h2>
+          <p className="text-slate-600 mb-4">{error}</p>
+          <p className="text-sm text-slate-500">Please update your .env file with valid Supabase credentials and refresh.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <HashRouter>
