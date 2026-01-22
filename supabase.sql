@@ -4,6 +4,72 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Migration: Add user_id columns to existing tables
+DO $$ 
+BEGIN
+  -- Add user_id to leads if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'leads' AND column_name = 'user_id') THEN
+    ALTER TABLE leads ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+  END IF;
+
+  -- Add user_id to knowledge_base if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'knowledge_base' AND column_name = 'user_id') THEN
+    ALTER TABLE knowledge_base ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+  END IF;
+
+  -- Add user_id to social_posts if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'social_posts' AND column_name = 'user_id') THEN
+    ALTER TABLE social_posts ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+  END IF;
+
+  -- Add user_id to integrations if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'integrations' AND column_name = 'user_id') THEN
+    ALTER TABLE integrations ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+  END IF;
+
+  -- Add user_id to settings if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'settings' AND column_name = 'user_id') THEN
+    ALTER TABLE settings ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+  END IF;
+
+  -- Add user_id to email_templates if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'email_templates' AND column_name = 'user_id') THEN
+    ALTER TABLE email_templates ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+  END IF;
+
+  -- Add user_id to ab_tests if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'ab_tests' AND column_name = 'user_id') THEN
+    ALTER TABLE ab_tests ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+  END IF;
+
+  -- Add user_id to webhooks if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'webhooks' AND column_name = 'user_id') THEN
+    ALTER TABLE webhooks ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+-- Drop old unique constraints if they exist
+DO $$
+BEGIN
+  -- Drop old integrations unique constraint on name only
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'integrations_name_key') THEN
+    ALTER TABLE integrations DROP CONSTRAINT integrations_name_key;
+  END IF;
+
+  -- Drop old settings unique constraint on key only  
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'settings_key_key') THEN
+    ALTER TABLE settings DROP CONSTRAINT settings_key_key;
+  END IF;
+END $$;
+
 -- Leads table
 CREATE TABLE IF NOT EXISTS leads (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
